@@ -22,6 +22,7 @@ from .display.ui import (
 )
 from .models import JobPosting
 from .scrapers.zhaopin import ZhaopinScraper
+from .scrapers.linkedin import LinkedInScraper
 from .utils.parser import parse_salary_min, parse_experience_years
 
 # Global state for verbose/quiet modes
@@ -164,8 +165,9 @@ def search(
     """Search for jobs matching the query.
     
     Examples:
-        jobs-cli search python                    # Search for Python jobs
-        jobs-cli search "backend developer"       # Search with phrase
+        jobs-cli search python                    # Search Zhaopin (default)
+        jobs-cli search python -p linkedin        # Search LinkedIn
+        jobs-cli search python -p all             # Search all platforms
         jobs-cli search python --tech django      # Filter by tech stack
         jobs-cli search python --salary-min 20    # Min salary ¥20k
         jobs-cli search python --exp 3-5          # 3-5 years experience
@@ -237,7 +239,12 @@ async def _search_async(
     all_jobs: list[JobPosting] = []
 
     # Determine which scrapers to use
-    scrapers_to_use = [platform] if platform else ["zhaopin"]  # Start with zhaopin only for now
+    if platform == "all":
+        scrapers_to_use = ["zhaopin", "linkedin"]
+    elif platform:
+        scrapers_to_use = [platform]
+    else:
+        scrapers_to_use = ["zhaopin"]  # Default to zhaopin
 
     with Progress(
         SpinnerColumn(),
@@ -245,38 +252,46 @@ async def _search_async(
         console=console,
     ) as progress:
         for scraper_name in scrapers_to_use:
-            if scraper_name == "zhaopin":
-                task = progress.add_task(f"Searching {scraper_name}...", total=None)
-                try:
-                    mcp = BrightDataMCP()
+            task = progress.add_task(f"Searching {scraper_name}...", total=None)
+            try:
+                mcp = BrightDataMCP()
+                
+                if scraper_name == "zhaopin":
                     scraper = ZhaopinScraper(mcp)
                     result = await scraper.search(query, location)
-
-                    # Track the request
-                    await db.increment_request_count(1)
-
-                    if result.error:
-                        display_warning(f"{scraper_name}: {result.error}")
-                    elif result.jobs:
-                        all_jobs.extend(result.jobs)
-                        progress.update(task, description=f"[green]{scraper_name}: found {len(result.jobs)} jobs[/green]")
-                    else:
-                        progress.update(task, description=f"[yellow]{scraper_name}: no jobs found[/yellow]")
-
-                except MCPConnectionError as e:
-                    display_warning(f"{scraper_name}: Connection failed after retries. Using cached data if available.")
-                    if state.verbose:
-                        console.print(f"[dim]Error details: {e}[/dim]")
-                except Exception as e:
-                    display_warning(f"{scraper_name} error: {e}")
-                    if state.verbose:
-                        import traceback
-                        console.print(f"[dim]{traceback.format_exc()}[/dim]")
-                finally:
+                elif scraper_name == "linkedin":
+                    scraper = LinkedInScraper(mcp)
+                    # LinkedIn works better with "China" as location
+                    linkedin_location = "China" if location.lower() in ["beijing", "北京"] else location
+                    result = await scraper.search(query, linkedin_location)
+                else:
+                    if not state.quiet:
+                        display_info(f"Scraper '{scraper_name}' not yet implemented")
                     progress.remove_task(task)
-            else:
-                if not state.quiet:
-                    display_info(f"Scraper '{scraper_name}' not yet implemented")
+                    continue
+
+                # Track the request
+                await db.increment_request_count(1)
+
+                if result.error:
+                    display_warning(f"{scraper_name}: {result.error}")
+                elif result.jobs:
+                    all_jobs.extend(result.jobs)
+                    progress.update(task, description=f"[green]{scraper_name}: found {len(result.jobs)} jobs[/green]")
+                else:
+                    progress.update(task, description=f"[yellow]{scraper_name}: no jobs found[/yellow]")
+
+            except MCPConnectionError as e:
+                display_warning(f"{scraper_name}: Connection failed after retries. Using cached data if available.")
+                if state.verbose:
+                    console.print(f"[dim]Error details: {e}[/dim]")
+            except Exception as e:
+                display_warning(f"{scraper_name} error: {e}")
+                if state.verbose:
+                    import traceback
+                    console.print(f"[dim]{traceback.format_exc()}[/dim]")
+            finally:
+                progress.remove_task(task)
 
     if not all_jobs:
         display_info("No jobs found. Try a different search query or platform.")

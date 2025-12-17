@@ -23,6 +23,7 @@ from ..client.mcp_client import BrightDataMCP
 from ..config import get_settings
 from ..models import JobPosting
 from ..scrapers.zhaopin import ZhaopinScraper
+from ..scrapers.linkedin import LinkedInScraper
 from ..utils.parser import parse_salary_min
 
 
