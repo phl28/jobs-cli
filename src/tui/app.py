@@ -71,6 +71,8 @@ class JobDetail(Static):
 
     def show_job(self, job: JobPosting) -> None:
         """Display job details."""
+        from rich.markup import escape
+        
         self.job = job
         
         # Format salary
@@ -79,19 +81,22 @@ class JobDetail(Static):
         # Format tags
         tags = ", ".join(job.tags[:8]) if job.tags else "None"
         
-        content = f"""[bold]{job.title}[/bold]
-[cyan]{job.company}[/cyan]
+        # Escape the URL to prevent markup interpretation
+        escaped_url = escape(job.url)
+        
+        content = f"""[bold]{escape(job.title)}[/bold]
+[cyan]{escape(job.company)}[/cyan]
 
-[bold]Location:[/bold] {job.location}
+[bold]Location:[/bold] {escape(job.location)}
 [bold]Salary:[/bold] {salary}
 [bold]Experience:[/bold] {job.experience or 'Not specified'}
 [bold]Education:[/bold] {job.education or 'Not specified'}
 
 [bold]Tags:[/bold] {tags}
 
-[bold]URL:[/bold] [link={job.url}]{job.url}[/link]
+[bold]URL:[/bold] {escaped_url}
 
-[dim]Press Enter to open in browser, Esc to close[/dim]"""
+[dim]Press 'o' or Enter to open in browser[/dim]"""
         
         self.update(content)
 
