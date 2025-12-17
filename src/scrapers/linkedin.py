@@ -52,11 +52,12 @@ class LinkedInScraper(BaseScraper):
         # Calculate start offset (25 jobs per page)
         start = (page - 1) * 25
         
-        # Get geoId if available
-        geo_id = LOCATION_IDS.get(location.lower(), LOCATION_IDS.get("china"))
+        # Always search China-wide for better results, then filter by location
+        # The city-specific geoIds don't work well with the guest API
+        geo_id = LOCATION_IDS.get("china")
         
-        # Build URL
-        params = f"?keywords={quote(query)}&location={quote(location)}&geoId={geo_id}&start={start}"
+        # Build URL - always use "China" in the URL for best results
+        params = f"?keywords={quote(query)}&location=China&geoId={geo_id}&start={start}"
         return f"{self.base_url}{params}"
 
     async def search(
@@ -64,6 +65,7 @@ class LinkedInScraper(BaseScraper):
         query: str,
         location: str = "China",
         page: int = 1,
+        filter_location: bool = True,
     ) -> ScraperResult:
         """Search for jobs on LinkedIn.
 
@@ -71,6 +73,7 @@ class LinkedInScraper(BaseScraper):
             query: Search query
             location: Location filter
             page: Page number
+            filter_location: Whether to filter results by location
 
         Returns:
             ScraperResult with jobs found
@@ -81,8 +84,12 @@ class LinkedInScraper(BaseScraper):
             markdown = await self.scrape_url(url)
             jobs = self.parse_search_results(markdown)
 
+            # Filter jobs by location if requested
+            if filter_location and location.lower() not in ["china", "中国"]:
+                jobs = self._filter_by_location(jobs, location)
+
             # LinkedIn guest API returns up to 25 jobs per page
-            has_more = len(jobs) >= 20
+            has_more = len(jobs) >= 10  # Lower threshold since we filter
 
             return ScraperResult(
                 jobs=jobs,
@@ -117,6 +124,40 @@ class LinkedInScraper(BaseScraper):
             Unchanged job object
         """
         return job
+
+    def _filter_by_location(self, jobs: list[JobPosting], location: str) -> list[JobPosting]:
+        """Filter jobs by location.
+
+        Args:
+            jobs: List of jobs to filter
+            location: Target location (e.g., "Beijing", "Shanghai")
+
+        Returns:
+            Filtered list of jobs matching the location
+        """
+        location_lower = location.lower()
+        
+        # Map common location names to patterns
+        location_patterns = {
+            "beijing": ["beijing", "北京"],
+            "北京": ["beijing", "北京"],
+            "shanghai": ["shanghai", "上海"],
+            "上海": ["shanghai", "上海"],
+            "shenzhen": ["shenzhen", "深圳"],
+            "深圳": ["shenzhen", "深圳"],
+            "guangzhou": ["guangzhou", "广州"],
+            "广州": ["guangzhou", "广州"],
+        }
+        
+        patterns = location_patterns.get(location_lower, [location_lower])
+        
+        filtered = []
+        for job in jobs:
+            job_location = job.location.lower()
+            if any(pattern in job_location for pattern in patterns):
+                filtered.append(job)
+        
+        return filtered
 
     def parse_search_results(self, markdown: str) -> list[JobPosting]:
         """Parse LinkedIn guest API results into job listings.

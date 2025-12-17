@@ -261,9 +261,8 @@ async def _search_async(
                     result = await scraper.search(query, location)
                 elif scraper_name == "linkedin":
                     scraper = LinkedInScraper(mcp)
-                    # LinkedIn works better with "China" as location
-                    linkedin_location = "China" if location.lower() in ["beijing", "北京"] else location
-                    result = await scraper.search(query, linkedin_location)
+                    # LinkedIn API needs broader search, then we filter results
+                    result = await scraper.search(query, location, filter_location=True)
                 else:
                     if not state.quiet:
                         display_info(f"Scraper '{scraper_name}' not yet implemented")
