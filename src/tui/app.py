@@ -370,7 +370,7 @@ class JobsApp(App):
                 self.detail_visible = True
 
     @on(Input.Submitted)
-    async def on_input_submitted(self, event: Input.Submitted) -> None:
+    def on_input_submitted(self, event: Input.Submitted) -> None:
         """Handle command input."""
         command = event.value.strip()
         event.input.value = ""
@@ -378,13 +378,13 @@ class JobsApp(App):
         if not command:
             return
             
-        await self.process_command(command)
+        self.process_command(command)
         
         # Return focus to table
         table = self.query_one("#job-table", DataTable)
         table.focus()
 
-    async def process_command(self, command: str) -> None:
+    def process_command(self, command: str) -> None:
         """Process a command string."""
         parts = command.split(maxsplit=1)
         cmd = parts[0].lower()
@@ -394,16 +394,17 @@ class JobsApp(App):
             self.exit()
         elif cmd == "search":
             if args:
-                await self.do_search(args)
+                # do_search is a @work decorated method, call it directly
+                self.do_search(args)
             else:
                 self.notify("Usage: search <query>", severity="warning")
         elif cmd == "list":
-            await self.load_jobs()
-            self.notify(f"Loaded {len(self.jobs)} jobs from cache")
+            self.run_worker(self._load_jobs_worker())
         elif cmd == "refresh":
-            await self.do_refresh(args or "软件工程师")
+            # do_refresh is a @work decorated method, call it directly
+            self.do_refresh(args or "软件工程师")
         elif cmd == "stats":
-            await self.show_stats()
+            self.run_worker(self._show_stats_worker())
         elif cmd in ("open", "o"):
             self.action_open_job()
         elif cmd == "show":
@@ -534,6 +535,15 @@ class JobsApp(App):
             self.notify(f"Refresh failed: {e}", severity="error")
 
         await self.update_status()
+
+    async def _show_stats_worker(self) -> None:
+        """Worker for showing statistics."""
+        await self.show_stats()
+
+    async def _load_jobs_worker(self) -> None:
+        """Worker for loading jobs."""
+        await self.load_jobs()
+        self.notify(f"Loaded {len(self.jobs)} jobs from cache")
 
     async def show_stats(self) -> None:
         """Show statistics notification."""
