@@ -7,7 +7,8 @@ from typing import Optional
 from textual import on, work
 from textual.app import App, ComposeResult
 from textual.binding import Binding
-from textual.containers import Container, Horizontal, Vertical
+from textual.containers import Container, Horizontal, Vertical, Center, Middle
+from textual.screen import ModalScreen
 from textual.widgets import (
     DataTable,
     Footer,
@@ -33,18 +34,32 @@ class StatusBar(Static):
         self.api_usage = "0/5000"
         self.job_count = 0
         self.last_search = ""
+        self.current_page = 1
+        self.has_more = False
 
-    def update_stats(self, api_used: int, api_limit: int, job_count: int, last_search: str = "") -> None:
+    def update_stats(
+        self,
+        api_used: int,
+        api_limit: int,
+        job_count: int,
+        last_search: str = "",
+        current_page: int = 1,
+        has_more: bool = False,
+    ) -> None:
         """Update the status bar with new stats."""
         self.api_usage = f"{api_used}/{api_limit}"
         self.job_count = job_count
         self.last_search = last_search
+        self.current_page = current_page
+        self.has_more = has_more
         self.refresh_display()
 
     def refresh_display(self) -> None:
         """Refresh the status bar display."""
         search_info = f" | Search: '{self.last_search}'" if self.last_search else ""
-        self.update(f"Jobs: {self.job_count} | API: {self.api_usage}{search_info}")
+        page_info = f" | Page {self.current_page}" if self.last_search else ""
+        more_info = " [n=more]" if self.has_more else ""
+        self.update(f"Jobs: {self.job_count} | API: {self.api_usage}{search_info}{page_info}{more_info}")
 
 
 class JobDetail(Static):
@@ -90,7 +105,108 @@ class CommandInput(Input):
     """Command input field at the bottom."""
 
     def __init__(self, **kwargs) -> None:
-        super().__init__(placeholder="Type command: search <query>, list, refresh, stats, quit", **kwargs)
+        super().__init__(placeholder="Type command (? for help): search <query>, list, refresh, quit", **kwargs)
+
+
+class HelpModal(ModalScreen):
+    """Modal screen showing keyboard shortcuts and commands."""
+
+    BINDINGS = [
+        Binding("escape", "dismiss", "Close"),
+        Binding("q", "dismiss", "Close"),
+        Binding("?", "dismiss", "Close"),
+    ]
+
+    CSS = """
+    HelpModal {
+        align: center middle;
+    }
+
+    #help-container {
+        width: 70;
+        height: auto;
+        max-height: 80%;
+        border: thick $primary;
+        background: $surface;
+        padding: 1 2;
+    }
+
+    #help-title {
+        text-align: center;
+        text-style: bold;
+        color: $text;
+        padding-bottom: 1;
+        border-bottom: solid $primary;
+        margin-bottom: 1;
+    }
+
+    .help-section {
+        margin-bottom: 1;
+    }
+
+    .help-section-title {
+        text-style: bold;
+        color: $accent;
+    }
+
+    .help-row {
+        padding-left: 2;
+    }
+
+    .help-key {
+        color: $warning;
+        text-style: bold;
+        width: 15;
+    }
+
+    .help-desc {
+        color: $text-muted;
+    }
+
+    #help-footer {
+        text-align: center;
+        color: $text-muted;
+        padding-top: 1;
+        border-top: solid $primary;
+        margin-top: 1;
+    }
+    """
+
+    def compose(self) -> ComposeResult:
+        """Create the help modal content."""
+        with Container(id="help-container"):
+            yield Static("Jobs CLI - Keyboard Shortcuts", id="help-title")
+            
+            # Navigation section
+            yield Static("[bold cyan]Navigation[/bold cyan]", classes="help-section-title")
+            yield Static("[yellow]j / ↓[/yellow]        Move down in job list", classes="help-row")
+            yield Static("[yellow]k / ↑[/yellow]        Move up in job list", classes="help-row")
+            yield Static("[yellow]Enter[/yellow]        Select job / Open in browser", classes="help-row")
+            yield Static("[yellow]Esc[/yellow]          Clear selection", classes="help-row")
+            yield Static("")
+            
+            # Actions section
+            yield Static("[bold cyan]Actions[/bold cyan]", classes="help-section-title")
+            yield Static("[yellow]/[/yellow]            Focus search input", classes="help-row")
+            yield Static("[yellow]r[/yellow]            Refresh jobs from API", classes="help-row")
+            yield Static("[yellow]n[/yellow]            Load next page of results", classes="help-row")
+            yield Static("[yellow]o[/yellow]            Open selected job in browser", classes="help-row")
+            yield Static("[yellow]?[/yellow]            Show this help", classes="help-row")
+            yield Static("[yellow]q[/yellow]            Quit application", classes="help-row")
+            yield Static("")
+            
+            # Commands section
+            yield Static("[bold cyan]Commands (type in command bar)[/bold cyan]", classes="help-section-title")
+            yield Static("[yellow]search <query>[/yellow]   Search for jobs", classes="help-row")
+            yield Static("[yellow]list[/yellow]             List all cached jobs", classes="help-row")
+            yield Static("[yellow]more / next[/yellow]      Load next page of results", classes="help-row")
+            yield Static("[yellow]show <n>[/yellow]         Show job #n details", classes="help-row")
+            yield Static("[yellow]open[/yellow]             Open selected job", classes="help-row")
+            yield Static("[yellow]refresh[/yellow]          Refresh from API", classes="help-row")
+            yield Static("[yellow]stats[/yellow]            Show API usage stats", classes="help-row")
+            yield Static("[yellow]quit[/yellow]             Exit application", classes="help-row")
+            
+            yield Static("Press [bold]Esc[/bold], [bold]q[/bold], or [bold]?[/bold] to close", id="help-footer")
 
 
 class JobsApp(App):
@@ -143,10 +259,14 @@ class JobsApp(App):
         Binding("q", "quit", "Quit"),
         Binding("j", "cursor_down", "Down", show=False),
         Binding("k", "cursor_up", "Up", show=False),
-        Binding("enter", "select_job", "View/Open"),
-        Binding("escape", "clear_detail", "Clear"),
+        Binding("down", "cursor_down", "Down", show=False),
+        Binding("up", "cursor_up", "Up", show=False),
+        Binding("enter", "select_job", "Select"),
+        Binding("escape", "clear_detail", "Clear", show=False),
+        Binding("o", "open_job", "Open"),
         Binding("/", "focus_search", "Search"),
         Binding("r", "refresh", "Refresh"),
+        Binding("n", "load_more", "More"),
         Binding("?", "show_help", "Help"),
     ]
 
@@ -155,6 +275,8 @@ class JobsApp(App):
         self.jobs: list[JobPosting] = []
         self.selected_job: Optional[JobPosting] = None
         self.current_search: str = ""
+        self.current_page: int = 1
+        self.has_more: bool = False
         self.db: Optional[Database] = None
         self.detail_visible = False
 
@@ -227,6 +349,8 @@ class JobsApp(App):
             stats.monthly_limit,
             job_count,
             self.current_search,
+            self.current_page,
+            self.has_more,
         )
 
     @on(DataTable.RowSelected)
@@ -292,50 +416,83 @@ class JobsApp(App):
                     self.notify("Usage: show <number>", severity="warning")
         elif cmd == "help":
             self.action_show_help()
+        elif cmd in ("more", "next", "n"):
+            self.action_load_more()
         else:
             self.notify(f"Unknown command: {cmd}. Type 'help' for commands.", severity="warning")
 
     @work(exclusive=True)
-    async def do_search(self, query: str) -> None:
-        """Perform a search (may fetch from API)."""
-        self.notify(f"Searching for '{query}'...")
+    async def do_search(self, query: str, page: int = 1, append: bool = False) -> None:
+        """Perform a search (may fetch from API).
+        
+        Args:
+            query: Search query
+            page: Page number to fetch
+            append: If True, append to existing results instead of replacing
+        """
+        if page == 1:
+            self.notify(f"Searching for '{query}'...")
+        else:
+            self.notify(f"Loading page {page}...")
         
         if self.db is None:
             return
 
-        # First try cache
-        cached = await self.db.search_jobs(query, limit=100)
+        # First try cache (only for page 1)
+        if page == 1 and not append:
+            cached = await self.db.search_jobs(query, limit=100)
+            
+            if cached:
+                self.jobs = cached
+                self.current_search = query
+                self.current_page = 1
+                self.has_more = True  # Assume there's more when showing cache
+                await self.refresh_table()
+                self.notify(f"Found {len(cached)} cached jobs for '{query}'. Press 'n' to fetch more from API.")
+                await self.update_status()
+                return
+
+        # Fetch from API
+        if page == 1:
+            self.notify("Fetching from API...")
         
-        if cached:
-            self.jobs = cached
-            self.current_search = query
-            await self.refresh_table()
-            self.notify(f"Found {len(cached)} cached jobs for '{query}'")
-        else:
-            # Fetch from API
-            self.notify("No cached results, fetching from API...")
-            try:
-                settings = get_settings()
-                if not settings.bright_data_api_token:
-                    self.notify("API token not configured", severity="error")
-                    return
-                    
-                mcp = BrightDataMCP()
-                scraper = ZhaopinScraper(mcp)
-                result = await scraper.search(query, "Beijing")
+        try:
+            settings = get_settings()
+            if not settings.bright_data_api_token:
+                self.notify("API token not configured", severity="error")
+                return
                 
-                if result.jobs:
-                    await self.db.save_jobs(result.jobs)
-                    await self.db.increment_request_count(1)
+            mcp = BrightDataMCP()
+            scraper = ZhaopinScraper(mcp)
+            result = await scraper.search(query, "Beijing", page=page)
+            
+            if result.jobs:
+                await self.db.save_jobs(result.jobs)
+                await self.db.increment_request_count(1)
+                
+                if append:
+                    self.jobs.extend(result.jobs)
+                else:
                     self.jobs = result.jobs
-                    self.current_search = query
-                    await self.refresh_table()
+                    
+                self.current_search = query
+                self.current_page = page
+                self.has_more = result.has_more
+                await self.refresh_table()
+                
+                if append:
+                    self.notify(f"Loaded {len(result.jobs)} more jobs (total: {len(self.jobs)})")
+                else:
                     self.notify(f"Found {len(result.jobs)} jobs for '{query}'")
+            else:
+                self.has_more = False
+                if page > 1:
+                    self.notify("No more jobs found", severity="warning")
                 else:
                     self.notify(f"No jobs found for '{query}'", severity="warning")
-                    
-            except Exception as e:
-                self.notify(f"Search failed: {e}", severity="error")
+                
+        except Exception as e:
+            self.notify(f"Search failed: {e}", severity="error")
 
         await self.update_status()
 
@@ -447,13 +604,22 @@ class JobsApp(App):
         """Trigger a refresh."""
         self.run_worker(self.do_refresh(self.current_search or "软件工程师"))
 
+    def action_load_more(self) -> None:
+        """Load more results from the next page."""
+        if not self.current_search:
+            self.notify("No active search. Use '/' to search first.", severity="warning")
+            return
+            
+        if not self.has_more:
+            self.notify("No more results available.", severity="warning")
+            return
+            
+        next_page = self.current_page + 1
+        self.run_worker(self.do_search(self.current_search, page=next_page, append=True))
+
     def action_show_help(self) -> None:
-        """Show help notification."""
-        self.notify(
-            "Commands: search <query>, list, refresh, show <n>, open, stats, quit\n"
-            "Keys: j/k=up/down, Enter=select/open, /=search, r=refresh, q=quit",
-            timeout=10,
-        )
+        """Show help modal."""
+        self.push_screen(HelpModal())
 
 
 def run_tui() -> None:
