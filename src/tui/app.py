@@ -617,7 +617,8 @@ class JobsApp(App):
 
     def action_refresh(self) -> None:
         """Trigger a refresh."""
-        self.run_worker(self.do_refresh(self.current_search or "软件工程师"))
+        # do_refresh is @work decorated, call directly
+        self.do_refresh(self.current_search or "软件工程师")
 
     def action_load_more(self) -> None:
         """Load more results from the next page."""
@@ -630,7 +631,8 @@ class JobsApp(App):
             return
             
         next_page = self.current_page + 1
-        self.run_worker(self.do_search(self.current_search, page=next_page, append=True))
+        # do_search is @work decorated, call directly
+        self.do_search(self.current_search, page=next_page, append=True)
 
     def action_show_help(self) -> None:
         """Show help modal."""
