@@ -640,6 +640,32 @@ async def _clear_cache_async(older_than: int, force: bool) -> None:
 
 
 @app.command()
+def tui() -> None:
+    """Launch interactive TUI mode.
+    
+    An interactive terminal interface for browsing and searching jobs.
+    
+    Keyboard shortcuts:
+        j/k     - Move up/down in job list
+        Enter   - Select job / Open in browser
+        /       - Focus search input
+        r       - Refresh jobs
+        q       - Quit
+    
+    Commands (type in command bar):
+        search <query>  - Search for jobs
+        list            - List all cached jobs
+        refresh         - Refresh from API
+        show <n>        - Show job #n
+        open            - Open selected job in browser
+        stats           - Show statistics
+        quit            - Exit
+    """
+    from .tui.app import run_tui
+    run_tui()
+
+
+@app.command()
 def test_connection() -> None:
     """Test the connection to Bright Data MCP."""
     asyncio.run(_test_connection_async())

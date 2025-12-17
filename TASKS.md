@@ -363,31 +363,32 @@ asyncio.run(scrape_job_page())
 
 ---
 
-## Sprint 6: Interactive TUI Mode (Future)
+## Sprint 6: Interactive TUI Mode - COMPLETED
 
-### 6.1 Long-running TUI Application
-- [ ] Convert to a long-running TUI app (like opencode/claude-code)
-- [ ] Persistent session - no need to restart for each command
-- [ ] Command-based interface (not conversational)
-- [ ] Real-time updates and status display
+### 6.1 Long-running TUI Application - COMPLETED
+- [x] Convert to a long-running TUI app using Textual
+- [x] Persistent session - no need to restart for each command
+- [x] Command-based interface
+- [x] Real-time status display
 
-### 6.2 TUI Features
-- [ ] Command prompt at bottom
-- [ ] Job list view with scrolling
-- [ ] Job detail view (side panel or full screen)
-- [ ] Status bar showing API usage, cache stats
-- [ ] Keyboard shortcuts for common actions
+### 6.2 TUI Features - COMPLETED
+- [x] Command prompt at bottom (Input widget)
+- [x] Job list view with DataTable (scrolling, selection)
+- [x] Job detail view (side panel)
+- [x] Status bar showing API usage, job count, current search
+- [x] Keyboard shortcuts for common actions
 
-### 6.3 Commands in TUI Mode
-- [ ] `search <query>` - search and display results
-- [ ] `list` - show cached jobs
-- [ ] `show <n>` - view job details
-- [ ] `open <n>` - open job URL in browser
-- [ ] `refresh` - refresh current results
-- [ ] `stats` - show statistics
-- [ ] `quit` / `q` - exit
+### 6.3 Commands in TUI Mode - COMPLETED
+- [x] `search <query>` - search and display results
+- [x] `list` - show cached jobs
+- [x] `show <n>` - view job details
+- [x] `open` - open selected job URL in browser
+- [x] `refresh` - refresh current results
+- [x] `stats` - show statistics notification
+- [x] `quit` / `q` - exit
 
-### 6.4 Tech Stack for TUI
-- [ ] Consider: Textual, rich.live, or prompt_toolkit
-- [ ] Async event loop for background updates
-- [ ] Vim-style navigation (j/k for up/down)
+### 6.4 Tech Stack for TUI - COMPLETED
+- [x] Textual framework for TUI
+- [x] Async workers for background API calls
+- [x] Vim-style navigation (j/k for up/down)
+- [x] Additional shortcuts: / for search, r for refresh, Enter to select/open, Esc to clear
