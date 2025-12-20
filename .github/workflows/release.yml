@@ -1,0 +1,146 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    strategy:
+      matrix:
+        include:
+          - os: ubuntu-latest
+            asset_name: jobs-cli-linux-amd64
+            asset_ext: ""
+          - os: macos-latest
+            asset_name: jobs-cli-darwin-amd64
+            asset_ext: ""
+          - os: macos-14
+            asset_name: jobs-cli-darwin-arm64
+            asset_ext: ""
+          - os: windows-latest
+            asset_name: jobs-cli-windows-amd64
+            asset_ext: ".exe"
+
+    runs-on: ${{ matrix.os }}
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v4
+
+      - name: Install dependencies
+        run: |
+          uv sync
+          uv pip install pyinstaller
+
+      - name: Build binary with PyInstaller
+        run: |
+          uv run pyinstaller \
+            --onefile \
+            --name "${{ matrix.asset_name }}" \
+            --collect-all textual \
+            --collect-all rich \
+            --hidden-import=asyncio \
+            --hidden-import=aiosqlite \
+            --hidden-import=src \
+            --hidden-import=src.main \
+            --hidden-import=src.cache \
+            --hidden-import=src.client \
+            --hidden-import=src.config \
+            --hidden-import=src.display \
+            --hidden-import=src.models \
+            --hidden-import=src.scrapers \
+            --hidden-import=src.tui \
+            --hidden-import=src.utils \
+            main.py
+
+      - name: Make binary executable (Unix)
+        if: runner.os != 'Windows'
+        run: chmod +x dist/${{ matrix.asset_name }}
+
+      - name: Create tarball (Unix)
+        if: runner.os != 'Windows'
+        run: |
+          cd dist
+          tar -czvf ${{ matrix.asset_name }}.tar.gz ${{ matrix.asset_name }}
+
+      - name: Create zip (Windows)
+        if: runner.os == 'Windows'
+        run: |
+          cd dist
+          Compress-Archive -Path "${{ matrix.asset_name }}${{ matrix.asset_ext }}" -DestinationPath "${{ matrix.asset_name }}.zip"
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.asset_name }}
+          path: |
+            dist/${{ matrix.asset_name }}.tar.gz
+            dist/${{ matrix.asset_name }}.zip
+          if-no-files-found: error
+
+  release:
+    needs: build
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Download all artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+
+      - name: List artifacts
+        run: find artifacts -type f
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            artifacts/**/*.tar.gz
+            artifacts/**/*.zip
+          generate_release_notes: true
+          draft: false
+          prerelease: ${{ contains(github.ref, '-rc') || contains(github.ref, '-beta') || contains(github.ref, '-alpha') }}
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  # Optional: Publish to PyPI
+  publish-pypi:
+    needs: release
+    runs-on: ubuntu-latest
+    # Only publish on non-prerelease tags
+    if: ${{ !contains(github.ref, '-rc') && !contains(github.ref, '-beta') && !contains(github.ref, '-alpha') }}
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v4
+
+      - name: Build package
+        run: uv build
+
+      - name: Publish to PyPI
+        env:
+          UV_PUBLISH_TOKEN: ${{ secrets.PYPI_API_TOKEN }}
+        run: uv publish
+        # Note: Only runs if PYPI_API_TOKEN secret is configured
+        continue-on-error: true

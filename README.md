@@ -1,4 +1,136 @@
-# Beijing Jobs CLI - Project Plan
+# Jobs CLI
+
+A terminal-based job search tool for software engineering positions in China, with a beautiful TUI (Text User Interface) built with Textual.
+
+## Installation
+
+### Pre-built Binaries (Recommended)
+
+Download the latest release for your platform from [GitHub Releases](https://github.com/phl28/jobs-cli/releases):
+
+- **macOS (Apple Silicon)**: `jobs-cli-darwin-arm64.tar.gz`
+- **macOS (Intel)**: `jobs-cli-darwin-amd64.tar.gz`
+- **Linux**: `jobs-cli-linux-amd64.tar.gz`
+- **Windows**: `jobs-cli-windows-amd64.zip`
+
+```bash
+# macOS/Linux
+tar -xzf jobs-cli-darwin-arm64.tar.gz
+chmod +x jobs-cli-darwin-arm64
+./jobs-cli-darwin-arm64 --help
+```
+
+### Via Homebrew (macOS)
+
+```bash
+brew tap phl28/tap
+brew install jobs-cli
+```
+
+### From Source (requires Python 3.12+)
+
+```bash
+# Clone the repository
+git clone https://github.com/phl28/jobs-cli.git
+cd jobs-cli
+
+# Install with uv
+uv sync
+
+# Run
+uv run jobs-cli --help
+```
+
+### Via pip/uvx
+
+```bash
+# Install from PyPI
+pip install jobs-cli
+# or
+uvx jobs-cli
+```
+
+## Quick Start
+
+1. Get a free Bright Data API token from [brightdata.com](https://brightdata.com)
+2. Set up your environment:
+   ```bash
+   cp .env.example .env
+   # Edit .env and add your BRIGHT_DATA_API_TOKEN
+   ```
+3. Launch the TUI:
+   ```bash
+   jobs-cli tui
+   ```
+
+## TUI Keyboard Shortcuts
+
+| Key | Action |
+|-----|--------|
+| `s` | Search for jobs |
+| `p` | Select platform (zhaopin/linkedin/all) |
+| `f` | Set filters (location, tech, salary, experience) |
+| `c` | Clear all filters |
+| `j/k` | Navigate up/down |
+| `Enter` | Select job / Open in browser |
+| `o` | Open job in browser |
+| `n` | Load next page |
+| `r` | Refresh from API |
+| `?` | Show help |
+| `q` | Quit |
+
+## CLI Commands
+
+```bash
+# Search for jobs
+jobs-cli search "python developer" --location Beijing --platform zhaopin
+
+# List cached jobs
+jobs-cli list --limit 20
+
+# Show job details
+jobs-cli show 1
+
+# Export to CSV/JSON
+jobs-cli export jobs.csv
+
+# View statistics
+jobs-cli stats
+```
+
+## Building from Source
+
+### Build Standalone Binary
+
+```bash
+# Install dev dependencies
+uv pip install pyinstaller
+
+# Build binary
+uv run pyinstaller jobs-cli.spec
+
+# Binary is at dist/jobs-cli
+./dist/jobs-cli --help
+```
+
+## Releasing
+
+Releases are automated via GitHub Actions. To create a new release:
+
+```bash
+# Tag a new version
+git tag v0.1.0
+git push origin v0.1.0
+```
+
+The workflow will:
+1. Build binaries for macOS (arm64, amd64), Linux, and Windows
+2. Create a GitHub Release with all binaries
+3. Optionally publish to PyPI (if `PYPI_API_TOKEN` secret is configured)
+
+---
+
+# Project Plan
 
 ## Project Overview
 A Python CLI tool to aggregate software engineering job listings in Beijing from major Chinese job platforms, displayed beautifully in the terminal using Rich. Personal use, leveraging Bright Data's free tier (5,000 requests/month).

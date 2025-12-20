@@ -15,6 +15,11 @@ dependencies = [
     "typer>=0.20.0",
 ]
 
+[project.optional-dependencies]
+dev = [
+    "pyinstaller>=6.0.0",
+]
+
 [project.scripts]
 jobs-cli = "src.main:main"
 
