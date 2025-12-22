@@ -4,12 +4,77 @@ on:
   push:
     tags:
       - 'v*'
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Version to release (semver format: 0.1.0, 1.2.3-beta)'
+        required: true
+        type: string
 
 permissions:
   contents: write
 
 jobs:
+  # This job only runs for workflow_dispatch to validate and create the tag
+  validate-and-tag:
+    if: github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+
+    outputs:
+      tag: ${{ steps.set-tag.outputs.tag }}
+
+    steps:
+      - name: Validate branch is main
+        if: github.ref != 'refs/heads/main'
+        run: |
+          echo "::error::Releases can only be created from the main branch."
+          echo "Current branch: ${{ github.ref }}"
+          exit 1
+
+      - name: Validate version format
+        run: |
+          VERSION="${{ inputs.version }}"
+          # Semver regex: X.Y.Z or X.Y.Z-suffix
+          if [[ ! "$VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+(-[a-zA-Z0-9.]+)?$ ]]; then
+            echo "::error::Invalid version format: '$VERSION'"
+            echo "Expected semver format: X.Y.Z or X.Y.Z-suffix (e.g., 0.1.0, 1.2.3-beta, 2.0.0-rc.1)"
+            exit 1
+          fi
+          echo "Version format valid: $VERSION"
+
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0  # Fetch all history for tags
+
+      - name: Check tag doesn't already exist
+        run: |
+          TAG="v${{ inputs.version }}"
+          if git rev-parse "$TAG" >/dev/null 2>&1; then
+            echo "::error::Tag '$TAG' already exists!"
+            exit 1
+          fi
+          echo "Tag '$TAG' is available"
+
+      - name: Create and push tag
+        run: |
+          TAG="v${{ inputs.version }}"
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git tag -a "$TAG" -m "Release $TAG"
+          git push origin "$TAG"
+          echo "Created and pushed tag: $TAG"
+
+      - name: Set tag output
+        id: set-tag
+        run: echo "tag=v${{ inputs.version }}" >> "$GITHUB_OUTPUT"
+
   build:
+    # For workflow_dispatch: wait for validate-and-tag
+    # For tag push: run immediately
+    needs: validate-and-tag
+    if: always() && (needs.validate-and-tag.result == 'success' || github.event_name == 'push')
+    
     strategy:
       matrix:
         include:
@@ -31,6 +96,9 @@ jobs:
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
+        with:
+          # For workflow_dispatch, checkout the newly created tag
+          ref: ${{ needs.validate-and-tag.outputs.tag || github.ref }}
 
       - name: Set up Python
         uses: actions/setup-python@v5
@@ -92,10 +160,20 @@ jobs:
           if-no-files-found: error
 
   release:
-    needs: build
+    needs: [validate-and-tag, build]
+    if: always() && needs.build.result == 'success'
     runs-on: ubuntu-latest
 
     steps:
+      - name: Determine tag name
+        id: get-tag
+        run: |
+          if [ "${{ github.event_name }}" == "workflow_dispatch" ]; then
+            echo "tag=${{ needs.validate-and-tag.outputs.tag }}" >> "$GITHUB_OUTPUT"
+          else
+            echo "tag=${{ github.ref_name }}" >> "$GITHUB_OUTPUT"
+          fi
+
       - name: Download all artifacts
         uses: actions/download-artifact@v4
         with:
@@ -107,25 +185,27 @@ jobs:
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
         with:
+          tag_name: ${{ steps.get-tag.outputs.tag }}
           files: |
             artifacts/**/*.tar.gz
             artifacts/**/*.zip
           generate_release_notes: true
           draft: false
-          prerelease: ${{ contains(github.ref, '-rc') || contains(github.ref, '-beta') || contains(github.ref, '-alpha') }}
+          prerelease: ${{ contains(steps.get-tag.outputs.tag, '-rc') || contains(steps.get-tag.outputs.tag, '-beta') || contains(steps.get-tag.outputs.tag, '-alpha') }}
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
   # Optional: Publish to PyPI
   publish-pypi:
-    needs: release
+    needs: [validate-and-tag, release]
+    if: always() && needs.release.result == 'success' && !contains(needs.validate-and-tag.outputs.tag || github.ref_name, '-rc') && !contains(needs.validate-and-tag.outputs.tag || github.ref_name, '-beta') && !contains(needs.validate-and-tag.outputs.tag || github.ref_name, '-alpha')
     runs-on: ubuntu-latest
-    # Only publish on non-prerelease tags
-    if: ${{ !contains(github.ref, '-rc') && !contains(github.ref, '-beta') && !contains(github.ref, '-alpha') }}
 
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
+        with:
+          ref: ${{ needs.validate-and-tag.outputs.tag || github.ref }}
 
       - name: Set up Python
         uses: actions/setup-python@v5
