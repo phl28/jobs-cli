@@ -115,18 +115,27 @@ uv run pyinstaller jobs-cli.spec
 
 ## Releasing
 
-Releases are automated via GitHub Actions. To create a new release:
+Releases are automated via GitHub Actions. Two options:
+
+### Option 1: GitHub UI (Recommended)
+
+1. Go to **Actions** → **Release** → **Run workflow**
+2. Enter version in semver format: `0.1.0`, `1.2.3-beta`, etc.
+3. Click **Run workflow**
+
+### Option 2: Git Tag
 
 ```bash
-# Tag a new version
 git tag v0.1.0
 git push origin v0.1.0
 ```
 
-The workflow will:
-1. Build binaries for macOS (arm64, amd64), Linux, and Windows
-2. Create a GitHub Release with all binaries
-3. Optionally publish to PyPI (if `PYPI_API_TOKEN` secret is configured)
+### What Happens
+
+- Builds binaries for macOS (arm64, amd64), Linux, and Windows
+- Creates GitHub Release with all binaries
+- Versions with `-alpha`, `-beta`, `-rc` are marked as prereleases
+- Optionally publishes to PyPI (if `PYPI_API_TOKEN` secret is configured)
 
 ---
 
